@@ -6,22 +6,25 @@ namespace ClaudeCostWatch;
 
 static class LogParser
 {
+    // Each Anthropic API response is written as multiple log entries (one per content block)
+    // all sharing the same requestId. We deduplicate by requestId so tokens are counted once.
     public static IEnumerable<UsageEntry> Parse(string filePath, long startOffset = 0)
     {
         using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         stream.Seek(startOffset, SeekOrigin.Begin);
         using var reader = new StreamReader(stream);
 
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         string? line;
         while ((line = reader.ReadLine()) != null)
         {
-            var entry = TryParseLine(line);
+            var entry = TryParseLine(line, seen);
             if (entry != null)
                 yield return entry;
         }
     }
 
-    private static UsageEntry? TryParseLine(string line)
+    private static UsageEntry? TryParseLine(string line, HashSet<string> seen)
     {
         try
         {
@@ -30,6 +33,13 @@ static class LogParser
 
             if (!root.TryGetProperty("type", out var typeProp) || typeProp.GetString() != "assistant")
                 return null;
+            if (!root.TryGetProperty("requestId", out var reqProp))
+                return null;
+
+            var requestId = reqProp.GetString();
+            if (requestId is null || !seen.Add(requestId))
+                return null;
+
             if (!root.TryGetProperty("timestamp", out var tsProp))
                 return null;
             if (!root.TryGetProperty("message", out var msg))
