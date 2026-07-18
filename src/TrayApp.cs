@@ -1,9 +1,13 @@
+using Microsoft.Win32;
 using System.Windows.Forms;
 
 namespace ClaudeCostWatch;
 
 sealed class TrayApp : ApplicationContext
 {
+    private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string AppName = "ClaudeCostWatch";
+
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _timer;
     private readonly LiteLlmPricingProvider _pricing;
@@ -68,9 +72,34 @@ sealed class TrayApp : ApplicationContext
     private static string FormatCost(decimal? cost) =>
         cost.HasValue ? cost.Value.ToString("C2") : "$?.??";
 
+    private static bool IsStartupEnabled()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+        return key?.GetValue(AppName) is string path
+            && path.Equals(Environment.ProcessPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void SetStartup(bool enable)
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true)!;
+        if (enable)
+            key.SetValue(AppName, Environment.ProcessPath!);
+        else
+            key.DeleteValue(AppName, throwOnMissingValue: false);
+    }
+
     private ContextMenuStrip BuildContextMenu()
     {
+        var startupItem = new ToolStripMenuItem("Start with Windows");
+        startupItem.Click += (_, _) =>
+        {
+            SetStartup(!IsStartupEnabled());
+            startupItem.Checked = IsStartupEnabled();
+        };
+
         var menu = new ContextMenuStrip();
+        menu.Opening += (_, _) => startupItem.Checked = IsStartupEnabled();
+
         menu.Items.Add("Open log folder", null, (_, _) => _watcher.OpenLogFolder());
         menu.Items.Add("Refresh now", null, async (_, _) =>
         {
@@ -83,6 +112,8 @@ sealed class TrayApp : ApplicationContext
             await _watcher.RescanAsync();
             UpdateTooltip();
         });
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(startupItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) =>
         {
