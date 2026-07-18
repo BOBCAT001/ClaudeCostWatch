@@ -45,6 +45,9 @@ sealed class TrayApp : ApplicationContext
         _timer.Start();
 
         _ = InitAsync();
+
+        MessageBox.Show("ClaudeCodeWatch active and now visible in tray",
+            "ClaudeCostWatch", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private async void OnTimerTick(object? sender, EventArgs e)
