@@ -5,12 +5,14 @@ namespace ClaudeCostWatch;
 sealed class BreakdownForm : Form
 {
     private readonly CostAggregator _aggregator;
+    private readonly ClaudeCredentials _credentials;
     private readonly ListView _list;
     private readonly Label _footer;
 
-    public BreakdownForm(CostAggregator aggregator)
+    public BreakdownForm(CostAggregator aggregator, ClaudeCredentials credentials)
     {
         _aggregator = aggregator;
+        _credentials = credentials;
 
         Text = "Project Breakdown";
         Size = new Size(600, 340);
@@ -96,7 +98,8 @@ sealed class BreakdownForm : Form
         }
 
         _list.EndUpdate();
-        _footer.Text = $"Updated {DateTime.Now:HH:mm:ss}";
+        var planNote = _credentials.IsSubscription ? $"{_credentials.PlanLabel} plan · API-equivalent · " : "";
+        _footer.Text = $"{planNote}Updated {DateTime.Now:HH:mm:ss}";
     }
 
     private static string FormatCost(decimal cost) => cost.ToString("C2");

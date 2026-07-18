@@ -16,6 +16,7 @@ sealed class TrayApp : ApplicationContext
     private readonly CostAggregator _aggregator;
     private readonly LogWatcher _watcher;
     private readonly AppSettings _settings;
+    private readonly ClaudeCredentials _credentials;
     private readonly UsageLogger _logger = new();
     private DateTime _lastScanDate = DateTime.Today;
     private BreakdownForm? _breakdownForm;
@@ -25,6 +26,7 @@ sealed class TrayApp : ApplicationContext
     public TrayApp()
     {
         _settings = AppSettings.Load();
+        _credentials = ClaudeCredentials.Load();
         _aggregator = new CostAggregator();
         _pricing = new LiteLlmPricingProvider();
         var calculator = new CostCalculator(_pricing);
@@ -68,12 +70,14 @@ sealed class TrayApp : ApplicationContext
     {
         var (daily, weekly, monthly) = _aggregator.GetTotals();
         var now = DateTime.Now;
-        var suffix = _logger.IsLogging ? $" [{_logger.ActiveTaskId}]" : "";
-        var text = $"ClaudeCostWatch{suffix} — {now:MMMM yyyy}\nToday:  {FormatCost(daily)}\nWeek:   {FormatCost(weekly)}\nMonth: {FormatCost(monthly)}";
+        var plan = _credentials.IsSubscription ? $" ({_credentials.PlanLabel})" : "";
+        var task = _logger.IsLogging ? $" [{_logger.ActiveTaskId}]" : "";
+        var equiv = _credentials.IsSubscription ? "~" : "";
+        var text = $"ClaudeCostWatch{plan}{task} — {now:MMMM yyyy}\nToday:  {equiv}{FormatCost(daily)}\nWeek:   {equiv}{FormatCost(weekly)}\nMonth: {equiv}{FormatCost(monthly)}";
         if (_logger.IsLogging)
         {
             var taskCost = _logger.GetTaskTotal(_aggregator.GetProjectTotals());
-            text += $"\nTask:   {taskCost:C2}";
+            text += $"\nTask:   {equiv}{taskCost:C2}";
         }
         _trayIcon.Text = text.Length > 127 ? text[..127] : text;
     }
@@ -208,7 +212,7 @@ sealed class TrayApp : ApplicationContext
     private void ShowBreakdown()
     {
         if (_breakdownForm is null || _breakdownForm.IsDisposed)
-            _breakdownForm = new BreakdownForm(_aggregator);
+            _breakdownForm = new BreakdownForm(_aggregator, _credentials);
 
         _breakdownForm.RefreshData();
         _breakdownForm.Show();
