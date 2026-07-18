@@ -14,6 +14,7 @@ sealed class TrayApp : ApplicationContext
     private readonly CostAggregator _aggregator;
     private readonly LogWatcher _watcher;
     private DateTime _lastScanDate = DateTime.Today;
+    private BreakdownForm? _breakdownForm;
 
     public TrayApp()
     {
@@ -100,6 +101,8 @@ sealed class TrayApp : ApplicationContext
         var menu = new ContextMenuStrip();
         menu.Opening += (_, _) => startupItem.Checked = IsStartupEnabled();
 
+        menu.Items.Add("Project breakdown", null, (_, _) => ShowBreakdown());
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open log folder", null, (_, _) => _watcher.OpenLogFolder());
         menu.Items.Add("Refresh now", null, async (_, _) =>
         {
@@ -123,6 +126,16 @@ sealed class TrayApp : ApplicationContext
         return menu;
     }
 
+    private void ShowBreakdown()
+    {
+        if (_breakdownForm is null || _breakdownForm.IsDisposed)
+            _breakdownForm = new BreakdownForm(_aggregator);
+
+        _breakdownForm.RefreshData();
+        _breakdownForm.Show();
+        _breakdownForm.BringToFront();
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -130,6 +143,7 @@ sealed class TrayApp : ApplicationContext
             _timer.Dispose();
             _trayIcon.Dispose();
             _watcher.Dispose();
+            _breakdownForm?.Dispose();
         }
         base.Dispose(disposing);
     }

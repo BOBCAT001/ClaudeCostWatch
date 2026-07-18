@@ -42,7 +42,7 @@ sealed class LogWatcher : IDisposable
 
         if (!Directory.Exists(_logRoot))
         {
-            _aggregator.Reset(0, 0, false);
+            _aggregator.Reset(0, 0, false, new());
             return Task.CompletedTask;
         }
 
@@ -51,9 +51,12 @@ sealed class LogWatcher : IDisposable
 
         decimal daily = 0, monthly = 0;
         bool hasData = false;
+        var projects = new Dictionary<string, (decimal Daily, decimal Monthly)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in Directory.EnumerateFiles(_logRoot, "*.jsonl", SearchOption.AllDirectories))
         {
+            var project = Path.GetFileName(Path.GetDirectoryName(file)!) ?? "unknown";
+
             foreach (var entry in LogParser.Parse(file))
             {
                 var cost = _calculator.Calculate(entry);
@@ -61,14 +64,25 @@ sealed class LogWatcher : IDisposable
 
                 hasData = true;
                 var local = entry.Timestamp.ToLocalTime();
-                if (local >= monthStart) monthly += cost.Value;
-                if (local.Date == today) daily += cost.Value;
+                bool thisMonth = local >= monthStart;
+                bool thisDay = local.Date == today;
+
+                if (thisMonth) monthly += cost.Value;
+                if (thisDay) daily += cost.Value;
+
+                if (thisMonth || thisDay)
+                {
+                    projects.TryGetValue(project, out var p);
+                    projects[project] = (
+                        p.Daily + (thisDay ? cost.Value : 0),
+                        p.Monthly + (thisMonth ? cost.Value : 0));
+                }
             }
 
             _fileOffsets[file] = new FileInfo(file).Length;
         }
 
-        _aggregator.Reset(daily, monthly, hasData);
+        _aggregator.Reset(daily, monthly, hasData, projects);
         return Task.CompletedTask;
     }
 
@@ -81,6 +95,7 @@ sealed class LogWatcher : IDisposable
         {
             if (!File.Exists(e.FullPath)) return;
 
+            var project = Path.GetFileName(Path.GetDirectoryName(e.FullPath)!) ?? "unknown";
             var offset = _fileOffsets.TryGetValue(e.FullPath, out var o) ? o : 0;
             var today = DateTime.Today;
             var monthStart = new DateTime(today.Year, today.Month, 1);
@@ -92,7 +107,7 @@ sealed class LogWatcher : IDisposable
 
                 var local = entry.Timestamp.ToLocalTime();
                 if (local >= monthStart)
-                    _aggregator.Add(cost.Value, isToday: local.Date == today);
+                    _aggregator.Add(cost.Value, isToday: local.Date == today, project: project);
             }
 
             _fileOffsets[e.FullPath] = new FileInfo(e.FullPath).Length;
