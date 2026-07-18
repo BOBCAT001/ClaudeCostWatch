@@ -1,4 +1,6 @@
 using Microsoft.Win32;
+using System.Diagnostics;
+using System.IO;
 using System.Windows.Forms;
 
 namespace ClaudeCostWatch;
@@ -13,11 +15,16 @@ sealed class TrayApp : ApplicationContext
     private readonly LiteLlmPricingProvider _pricing;
     private readonly CostAggregator _aggregator;
     private readonly LogWatcher _watcher;
+    private readonly AppSettings _settings;
+    private readonly UsageLogger _logger = new();
     private DateTime _lastScanDate = DateTime.Today;
     private BreakdownForm? _breakdownForm;
+    private ToolStripMenuItem? _logToggleItem;
+    private ToolStripMenuItem? _openLogItem;
 
     public TrayApp()
     {
+        _settings = AppSettings.Load();
         _aggregator = new CostAggregator();
         _pricing = new LiteLlmPricingProvider();
         var calculator = new CostCalculator(_pricing);
@@ -46,6 +53,8 @@ sealed class TrayApp : ApplicationContext
             await _watcher.RescanAsync();
         }
         UpdateTooltip();
+        if (_logger.IsLogging)
+            _logger.Update(_aggregator.GetProjectTotals());
     }
 
     private async Task InitAsync()
@@ -59,7 +68,8 @@ sealed class TrayApp : ApplicationContext
     {
         var (daily, weekly, monthly) = _aggregator.GetTotals();
         var now = DateTime.Now;
-        var text = $"ClaudeCostWatch — {now:MMMM yyyy}\nToday:  {FormatCost(daily)}\nWeek:   {FormatCost(weekly)}\nMonth: {FormatCost(monthly)}";
+        var suffix = _logger.IsLogging ? $" [{_logger.ActiveTaskId}]" : "";
+        var text = $"ClaudeCostWatch{suffix} — {now:MMMM yyyy}\nToday:  {FormatCost(daily)}\nWeek:   {FormatCost(weekly)}\nMonth: {FormatCost(monthly)}";
         _trayIcon.Text = text.Length > 127 ? text[..127] : text;
     }
 
@@ -98,10 +108,32 @@ sealed class TrayApp : ApplicationContext
             startupItem.Checked = IsStartupEnabled();
         };
 
+        _logToggleItem = new ToolStripMenuItem("Start logging...", null, (_, _) =>
+        {
+            if (_logger.IsLogging)
+                StopLogging();
+            else
+                StartLogging();
+        });
+
+        _openLogItem = new ToolStripMenuItem("Open log file", null, (_, _) => OpenLogFile());
+
         var menu = new ContextMenuStrip();
-        menu.Opening += (_, _) => startupItem.Checked = IsStartupEnabled();
+        menu.Opening += (_, _) =>
+        {
+            startupItem.Checked = IsStartupEnabled();
+            _logToggleItem.Text = _logger.IsLogging
+                ? $"Stop logging [{_logger.ActiveTaskId}]"
+                : "Start logging...";
+            _openLogItem.Enabled = _settings.LogFolder is not null
+                && File.Exists(Path.Combine(_settings.LogFolder, "usage_log.md"));
+        };
 
         menu.Items.Add("Project breakdown", null, (_, _) => ShowBreakdown());
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(_logToggleItem);
+        menu.Items.Add(_openLogItem);
+        menu.Items.Add("Set log folder...", null, (_, _) => ChooseLogFolder());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open log folder", null, (_, _) => _watcher.OpenLogFolder());
         menu.Items.Add("Refresh now", null, async (_, _) =>
@@ -120,10 +152,52 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) =>
         {
+            if (_logger.IsLogging)
+                _logger.Stop(_aggregator.GetProjectTotals());
             _trayIcon.Visible = false;
             Application.Exit();
         });
         return menu;
+    }
+
+    private void StartLogging()
+    {
+        if (_settings.LogFolder is null && !ChooseLogFolder()) return;
+
+        using var dlg = new InputDialog("Start Logging", "Task ID (e.g. PROJ-123 or #456):");
+        if (dlg.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(dlg.Value)) return;
+
+        _logger.Start(dlg.Value, _settings.LogFolder!, _aggregator.GetProjectTotals());
+        UpdateTooltip();
+    }
+
+    private void StopLogging()
+    {
+        _logger.Stop(_aggregator.GetProjectTotals());
+        UpdateTooltip();
+    }
+
+    private bool ChooseLogFolder()
+    {
+        using var dlg = new FolderBrowserDialog
+        {
+            Description = "Choose folder for usage logs",
+            UseDescriptionForTitle = true,
+            SelectedPath = _settings.LogFolder
+                ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        if (dlg.ShowDialog() != DialogResult.OK) return false;
+        _settings.LogFolder = dlg.SelectedPath;
+        _settings.Save();
+        return true;
+    }
+
+    private void OpenLogFile()
+    {
+        if (_settings.LogFolder is null) return;
+        var path = Path.Combine(_settings.LogFolder, "usage_log.md");
+        if (!File.Exists(path)) return;
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
     }
 
     private void ShowBreakdown()

@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows.Forms;
 
 namespace ClaudeCostWatch;
@@ -59,7 +58,7 @@ sealed class BreakdownForm : Form
         var projects = _aggregator.GetProjectTotals();
 
         // Decode all names first so we can detect collisions.
-        var decoded = projects.Keys.ToDictionary(k => k, k => DecodeProjectName(k));
+        var decoded = projects.Keys.ToDictionary(k => k, k => ProjectNames.Decode(k));
         var duplicates = decoded.Values
             .GroupBy(n => n, StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Count() > 1)
@@ -73,7 +72,7 @@ sealed class BreakdownForm : Form
         {
             var display = decoded[encoded];
             if (duplicates.Contains(display))
-                display = DisambiguateName(encoded, display);
+                display = ProjectNames.Disambiguate(encoded, display);
 
             var item = new ListViewItem(display)
             {
@@ -98,34 +97,6 @@ sealed class BreakdownForm : Form
 
         _list.EndUpdate();
         _footer.Text = $"Updated {DateTime.Now:HH:mm:ss}";
-    }
-
-    // Tries to decode E--gitrepos-ProjectName → ProjectName by reconstructing the Windows path.
-    // Falls back to the raw encoded name when the decoded path doesn't exist on disk (e.g. hyphens in dir names).
-    private static string DecodeProjectName(string encoded)
-    {
-        if (encoded.Length >= 3 && encoded[1] == '-' && encoded[2] == '-')
-        {
-            var rest = encoded[3..].Replace('-', Path.DirectorySeparatorChar);
-            var candidate = $@"{char.ToUpper(encoded[0])}:\{rest}";
-            if (Directory.Exists(candidate))
-                return Path.GetFileName(candidate)!;
-        }
-        return encoded;
-    }
-
-    // When two projects share the same folder name, prepend the parent directory.
-    private static string DisambiguateName(string encoded, string shortName)
-    {
-        if (encoded.Length >= 3 && encoded[1] == '-' && encoded[2] == '-')
-        {
-            var rest = encoded[3..].Replace('-', Path.DirectorySeparatorChar);
-            var candidate = $@"{char.ToUpper(encoded[0])}:\{rest}";
-            var parent = Path.GetFileName(Path.GetDirectoryName(candidate) ?? "");
-            if (!string.IsNullOrEmpty(parent))
-                return $"{parent}\\{shortName}";
-        }
-        return encoded;
     }
 
     private static string FormatCost(decimal cost) => cost.ToString("C2");
