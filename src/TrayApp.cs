@@ -147,7 +147,7 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(_openLogItem);
         menu.Items.Add("Set log folder...", null, (_, _) => ChooseLogFolder());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Open log folder", null, (_, _) => _watcher.OpenLogFolder());
+        menu.Items.Add("Open Claude JSONL folder", null, (_, _) => _watcher.OpenLogFolder());
         menu.Items.Add("Refresh now", null, async (_, _) =>
         {
             await _watcher.RescanAsync();
