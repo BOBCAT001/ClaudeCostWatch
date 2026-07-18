@@ -42,14 +42,15 @@ sealed class LogWatcher : IDisposable
 
         if (!Directory.Exists(_logRoot))
         {
-            _aggregator.Reset(0, 0, false, new());
+            _aggregator.Reset(0, 0, 0, false, new());
             return Task.CompletedTask;
         }
 
         var today = DateTime.Today;
         var monthStart = new DateTime(today.Year, today.Month, 1);
+        var weekStart = today.AddDays(-(((int)today.DayOfWeek + 6) % 7)); // Monday
 
-        decimal daily = 0, monthly = 0;
+        decimal daily = 0, weekly = 0, monthly = 0;
         bool hasData = false;
         var projects = new Dictionary<string, (decimal Daily, decimal Monthly)>(StringComparer.OrdinalIgnoreCase);
 
@@ -65,9 +66,11 @@ sealed class LogWatcher : IDisposable
                 hasData = true;
                 var local = entry.Timestamp.ToLocalTime();
                 bool thisMonth = local >= monthStart;
+                bool thisWeek = local.Date >= weekStart;
                 bool thisDay = local.Date == today;
 
                 if (thisMonth) monthly += cost.Value;
+                if (thisWeek) weekly += cost.Value;
                 if (thisDay) daily += cost.Value;
 
                 if (thisMonth || thisDay)
@@ -82,7 +85,7 @@ sealed class LogWatcher : IDisposable
             _fileOffsets[file] = new FileInfo(file).Length;
         }
 
-        _aggregator.Reset(daily, monthly, hasData, projects);
+        _aggregator.Reset(daily, weekly, monthly, hasData, projects);
         return Task.CompletedTask;
     }
 
@@ -99,6 +102,7 @@ sealed class LogWatcher : IDisposable
             var offset = _fileOffsets.TryGetValue(e.FullPath, out var o) ? o : 0;
             var today = DateTime.Today;
             var monthStart = new DateTime(today.Year, today.Month, 1);
+            var weekStart = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
 
             foreach (var entry in LogParser.Parse(e.FullPath, offset))
             {
@@ -107,7 +111,10 @@ sealed class LogWatcher : IDisposable
 
                 var local = entry.Timestamp.ToLocalTime();
                 if (local >= monthStart)
-                    _aggregator.Add(cost.Value, isToday: local.Date == today, project: project);
+                    _aggregator.Add(cost.Value,
+                        isToday: local.Date == today,
+                        isThisWeek: local.Date >= weekStart,
+                        project: project);
             }
 
             _fileOffsets[e.FullPath] = new FileInfo(e.FullPath).Length;

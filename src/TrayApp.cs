@@ -57,9 +57,9 @@ sealed class TrayApp : ApplicationContext
 
     private void UpdateTooltip()
     {
-        var (daily, monthly) = _aggregator.GetTotals();
+        var (daily, weekly, monthly) = _aggregator.GetTotals();
         var now = DateTime.Now;
-        var text = $"ClaudeCostWatch — {now:MMMM yyyy}\nToday:  {FormatCost(daily)}\nMonth: {FormatCost(monthly)}";
+        var text = $"ClaudeCostWatch — {now:MMMM yyyy}\nToday:  {FormatCost(daily)}\nWeek:   {FormatCost(weekly)}\nMonth: {FormatCost(monthly)}";
         _trayIcon.Text = text.Length > 127 ? text[..127] : text;
     }
 

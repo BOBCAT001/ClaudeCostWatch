@@ -74,7 +74,7 @@ sealed class BreakdownForm : Form
 
         if (_list.Items.Count == 0)
         {
-            var (daily, _) = _aggregator.GetTotals();
+            var (daily, _, _) = _aggregator.GetTotals();
             var msg = daily is null ? "Pricing data not yet available." : "No usage found this month.";
             var placeholder = new ListViewItem(msg) { ForeColor = SystemColors.GrayText };
             placeholder.SubItems.Add("");
