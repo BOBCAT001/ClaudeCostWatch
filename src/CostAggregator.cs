@@ -7,7 +7,7 @@ sealed class CostAggregator
     private decimal _weekly;
     private decimal _monthly;
     private bool _hasData;
-    private Dictionary<string, (decimal Daily, decimal Monthly)> _projects = new();
+    private Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> _projects = new();
 
     public void Add(decimal cost, bool isToday, bool isThisWeek, string project)
     {
@@ -19,12 +19,12 @@ sealed class CostAggregator
             _hasData = true;
 
             _projects.TryGetValue(project, out var p);
-            _projects[project] = (p.Daily + (isToday ? cost : 0), p.Monthly + cost);
+            _projects[project] = (p.Daily + (isToday ? cost : 0), p.Weekly + (isThisWeek ? cost : 0), p.Monthly + cost);
         }
     }
 
     public void Reset(decimal daily, decimal weekly, decimal monthly, bool hasData,
-        Dictionary<string, (decimal Daily, decimal Monthly)> projects)
+        Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> projects)
     {
         lock (_lock)
         {
@@ -46,11 +46,11 @@ sealed class CostAggregator
         }
     }
 
-    public IReadOnlyDictionary<string, (decimal Daily, decimal Monthly)> GetProjectTotals()
+    public IReadOnlyDictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> GetProjectTotals()
     {
         lock (_lock)
         {
-            return new Dictionary<string, (decimal Daily, decimal Monthly)>(_projects);
+            return new Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)>(_projects);
         }
     }
 }

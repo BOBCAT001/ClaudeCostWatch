@@ -14,8 +14,8 @@ sealed class BreakdownForm : Form
         _aggregator = aggregator;
 
         Text = "Project Breakdown";
-        Size = new Size(500, 340);
-        MinimumSize = new Size(380, 220);
+        Size = new Size(600, 340);
+        MinimumSize = new Size(460, 220);
         StartPosition = FormStartPosition.Manual;
         ShowInTaskbar = false;
         Icon = LoadIcon();
@@ -35,6 +35,7 @@ sealed class BreakdownForm : Form
         };
         _list.Columns.Add("Project", 280);
         _list.Columns.Add("Today", 95, HorizontalAlignment.Right);
+        _list.Columns.Add("Week", 95, HorizontalAlignment.Right);
         _list.Columns.Add("Month", 95, HorizontalAlignment.Right);
 
         _footer = new Label
@@ -57,17 +58,29 @@ sealed class BreakdownForm : Form
     {
         var projects = _aggregator.GetProjectTotals();
 
+        // Decode all names first so we can detect collisions.
+        var decoded = projects.Keys.ToDictionary(k => k, k => DecodeProjectName(k));
+        var duplicates = decoded.Values
+            .GroupBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         _list.BeginUpdate();
         _list.Items.Clear();
 
         foreach (var (encoded, costs) in projects.OrderByDescending(p => p.Value.Monthly))
         {
-            var display = DecodeProjectName(encoded);
+            var display = decoded[encoded];
+            if (duplicates.Contains(display))
+                display = DisambiguateName(encoded, display);
+
             var item = new ListViewItem(display)
             {
                 ToolTipText = encoded,
             };
             item.SubItems.Add(FormatCost(costs.Daily));
+            item.SubItems.Add(FormatCost(costs.Weekly));
             item.SubItems.Add(FormatCost(costs.Monthly));
             _list.Items.Add(item);
         }
@@ -77,6 +90,7 @@ sealed class BreakdownForm : Form
             var (daily, _, _) = _aggregator.GetTotals();
             var msg = daily is null ? "Pricing data not yet available." : "No usage found this month.";
             var placeholder = new ListViewItem(msg) { ForeColor = SystemColors.GrayText };
+            placeholder.SubItems.Add("");
             placeholder.SubItems.Add("");
             placeholder.SubItems.Add("");
             _list.Items.Add(placeholder);
@@ -96,6 +110,20 @@ sealed class BreakdownForm : Form
             var candidate = $@"{char.ToUpper(encoded[0])}:\{rest}";
             if (Directory.Exists(candidate))
                 return Path.GetFileName(candidate)!;
+        }
+        return encoded;
+    }
+
+    // When two projects share the same folder name, prepend the parent directory.
+    private static string DisambiguateName(string encoded, string shortName)
+    {
+        if (encoded.Length >= 3 && encoded[1] == '-' && encoded[2] == '-')
+        {
+            var rest = encoded[3..].Replace('-', Path.DirectorySeparatorChar);
+            var candidate = $@"{char.ToUpper(encoded[0])}:\{rest}";
+            var parent = Path.GetFileName(Path.GetDirectoryName(candidate) ?? "");
+            if (!string.IsNullOrEmpty(parent))
+                return $"{parent}\\{shortName}";
         }
         return encoded;
     }

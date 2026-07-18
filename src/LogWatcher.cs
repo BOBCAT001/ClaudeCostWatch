@@ -52,7 +52,7 @@ sealed class LogWatcher : IDisposable
 
         decimal daily = 0, weekly = 0, monthly = 0;
         bool hasData = false;
-        var projects = new Dictionary<string, (decimal Daily, decimal Monthly)>(StringComparer.OrdinalIgnoreCase);
+        var projects = new Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in Directory.EnumerateFiles(_logRoot, "*.jsonl", SearchOption.AllDirectories))
         {
@@ -73,11 +73,12 @@ sealed class LogWatcher : IDisposable
                 if (thisWeek) weekly += cost.Value;
                 if (thisDay) daily += cost.Value;
 
-                if (thisMonth || thisDay)
+                if (thisMonth || thisWeek || thisDay)
                 {
                     projects.TryGetValue(project, out var p);
                     projects[project] = (
                         p.Daily + (thisDay ? cost.Value : 0),
+                        p.Weekly + (thisWeek ? cost.Value : 0),
                         p.Monthly + (thisMonth ? cost.Value : 0));
                 }
             }
