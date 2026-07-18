@@ -43,6 +43,17 @@ sealed class UsageLogger
         _logFile = null;
     }
 
+    public decimal GetTaskTotal(IReadOnlyDictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> projects)
+    {
+        decimal total = 0;
+        foreach (var (encoded, current) in projects)
+        {
+            _snapshot.TryGetValue(encoded, out var snap);
+            total += Math.Max(0m, current.Monthly - snap.Monthly);
+        }
+        return total;
+    }
+
     private void WriteEntry(bool inProgress, DateTime? stopTime,
         IReadOnlyDictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> projects)
     {

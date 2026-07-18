@@ -70,6 +70,11 @@ sealed class TrayApp : ApplicationContext
         var now = DateTime.Now;
         var suffix = _logger.IsLogging ? $" [{_logger.ActiveTaskId}]" : "";
         var text = $"ClaudeCostWatch{suffix} — {now:MMMM yyyy}\nToday:  {FormatCost(daily)}\nWeek:   {FormatCost(weekly)}\nMonth: {FormatCost(monthly)}";
+        if (_logger.IsLogging)
+        {
+            var taskCost = _logger.GetTaskTotal(_aggregator.GetProjectTotals());
+            text += $"\nTask:   {taskCost:C2}";
+        }
         _trayIcon.Text = text.Length > 127 ? text[..127] : text;
     }
 
