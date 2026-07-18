@@ -49,12 +49,27 @@ static class LogParser
             if (!msg.TryGetProperty("usage", out var usage))
                 return null;
 
+            // Split cache creation tokens into 5m and 1h buckets using the nested breakdown.
+            // Fall back to treating all as 5m if the breakdown is absent (older log entries).
+            long cw5m, cw1h;
+            if (usage.TryGetProperty("cache_creation", out var cc))
+            {
+                cw5m = GetLong(cc, "ephemeral_5m_input_tokens");
+                cw1h = GetLong(cc, "ephemeral_1h_input_tokens");
+            }
+            else
+            {
+                cw5m = GetLong(usage, "cache_creation_input_tokens");
+                cw1h = 0;
+            }
+
             return new UsageEntry(
                 Model: modelProp.GetString() ?? "",
                 Timestamp: tsProp.GetDateTime(),
                 InputTokens: GetLong(usage, "input_tokens"),
                 OutputTokens: GetLong(usage, "output_tokens"),
-                CacheCreationTokens: GetLong(usage, "cache_creation_input_tokens"),
+                CacheCreation5mTokens: cw5m,
+                CacheCreation1hTokens: cw1h,
                 CacheReadTokens: GetLong(usage, "cache_read_input_tokens"));
         }
         catch

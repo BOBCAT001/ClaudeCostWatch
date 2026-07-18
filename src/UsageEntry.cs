@@ -5,5 +5,6 @@ record UsageEntry(
     DateTime Timestamp,
     long InputTokens,
     long OutputTokens,
-    long CacheCreationTokens,
+    long CacheCreation5mTokens,
+    long CacheCreation1hTokens,
     long CacheReadTokens);

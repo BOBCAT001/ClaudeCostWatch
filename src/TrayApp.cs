@@ -9,6 +9,7 @@ sealed class TrayApp : ApplicationContext
     private readonly LiteLlmPricingProvider _pricing;
     private readonly CostAggregator _aggregator;
     private readonly LogWatcher _watcher;
+    private DateTime _lastScanDate = DateTime.Today;
 
     public TrayApp()
     {
@@ -26,10 +27,20 @@ sealed class TrayApp : ApplicationContext
         };
 
         _timer = new System.Windows.Forms.Timer { Interval = 30_000 };
-        _timer.Tick += (_, _) => UpdateTooltip();
+        _timer.Tick += OnTimerTick;
         _timer.Start();
 
         _ = InitAsync();
+    }
+
+    private async void OnTimerTick(object? sender, EventArgs e)
+    {
+        if (DateTime.Today != _lastScanDate)
+        {
+            _lastScanDate = DateTime.Today;
+            await _watcher.RescanAsync();
+        }
+        UpdateTooltip();
     }
 
     private async Task InitAsync()

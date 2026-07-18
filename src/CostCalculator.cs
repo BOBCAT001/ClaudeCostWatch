@@ -10,7 +10,8 @@ sealed class CostCalculator(LiteLlmPricingProvider pricing)
 
         return (entry.InputTokens * rates.InputPerToken)
              + (entry.OutputTokens * rates.OutputPerToken)
-             + (entry.CacheCreationTokens * rates.CacheWritePerToken)
+             + (entry.CacheCreation5mTokens * rates.CacheWrite5mPerToken)
+             + (entry.CacheCreation1hTokens * rates.CacheWrite1hPerToken)
              + (entry.CacheReadTokens * rates.CacheReadPerToken);
     }
 }
