@@ -44,6 +44,11 @@ static class LogParser
                 return null;
             if (!root.TryGetProperty("message", out var msg))
                 return null;
+            // Skip streaming intermediate entries — they have stop_reason: null and partial
+            // output token counts. Only the final entry has the complete usage figures.
+            if (!msg.TryGetProperty("stop_reason", out var stopReason)
+                || stopReason.ValueKind == JsonValueKind.Null)
+                return null;
             if (!msg.TryGetProperty("model", out var modelProp))
                 return null;
             if (!msg.TryGetProperty("usage", out var usage))
