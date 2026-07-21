@@ -65,6 +65,7 @@ sealed class TrayApp : ApplicationContext
     private async Task InitAsync()
     {
         await _pricing.LoadAsync();
+        _pricing.SetOverrides(_settings.ModelRateOverrides);
         await _watcher.StartAsync();
         UpdateTooltip();
     }
@@ -159,6 +160,16 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add("Refresh pricing", null, async (_, _) =>
         {
             await _pricing.RefreshAsync();
+            await _watcher.RescanAsync();
+            UpdateTooltip();
+        });
+        menu.Items.Add("Edit model rates...", null, async (_, _) =>
+        {
+            using var form = new ModelRatesForm(_settings.ModelRateOverrides);
+            if (form.ShowDialog() != DialogResult.OK) return;
+            _settings.ModelRateOverrides = new(form.Result, StringComparer.OrdinalIgnoreCase);
+            _settings.Save();
+            _pricing.SetOverrides(_settings.ModelRateOverrides);
             await _watcher.RescanAsync();
             UpdateTooltip();
         });

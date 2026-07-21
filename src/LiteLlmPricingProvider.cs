@@ -22,6 +22,15 @@ sealed class LiteLlmPricingProvider
         "ClaudeCostWatch", "model_prices.json");
 
     private Dictionary<string, ModelRates> _rates = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, ModelRates> _overrides = new(StringComparer.OrdinalIgnoreCase);
+
+    public void SetOverrides(IReadOnlyDictionary<string, ModelRateOverride> overrides)
+    {
+        _overrides = overrides.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.ToModelRates(),
+            StringComparer.OrdinalIgnoreCase);
+    }
 
     public async Task LoadAsync()
     {
@@ -42,8 +51,11 @@ sealed class LiteLlmPricingProvider
             ParseFile(await File.ReadAllTextAsync(CachePath));
     }
 
-    public ModelRates? GetRates(string model) =>
-        _rates.TryGetValue(model, out var rates) ? rates : null;
+    public ModelRates? GetRates(string model)
+    {
+        if (_overrides.TryGetValue(model, out var r)) return r;
+        return _rates.TryGetValue(model, out r) ? r : null;
+    }
 
     private async Task FetchAndCacheAsync()
     {
