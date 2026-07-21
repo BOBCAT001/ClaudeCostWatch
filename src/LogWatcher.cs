@@ -42,7 +42,7 @@ sealed class LogWatcher : IDisposable
 
         if (!Directory.Exists(_logRoot))
         {
-            _aggregator.Reset(0, 0, 0, false, new(), new(), new());
+            _aggregator.Reset(0, 0, 0, false, new(), new(), new(), new(), new());
             return Task.CompletedTask;
         }
 
@@ -55,6 +55,8 @@ sealed class LogWatcher : IDisposable
         var projects = new Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)>(StringComparer.OrdinalIgnoreCase);
         var unknownModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var dailyCosts = new Dictionary<DateOnly, decimal>();
+        var dayProjectCosts = new Dictionary<DateOnly, Dictionary<string, decimal>>();
 
         foreach (var file in Directory.EnumerateFiles(_logRoot, "*.jsonl", SearchOption.AllDirectories))
         {
@@ -84,12 +86,18 @@ sealed class LogWatcher : IDisposable
                         p.Weekly + (thisWeek ? cost.Value : 0),
                         p.Monthly + (thisMonth ? cost.Value : 0));
                 }
+
+                var entryDate = DateOnly.FromDateTime(local);
+                dailyCosts[entryDate] = dailyCosts.TryGetValue(entryDate, out var dc) ? dc + cost.Value : cost.Value;
+                if (!dayProjectCosts.TryGetValue(entryDate, out var dpc))
+                    dayProjectCosts[entryDate] = dpc = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+                dpc[project] = dpc.TryGetValue(project, out var pp) ? pp + cost.Value : cost.Value;
             }
 
             _fileOffsets[file] = new FileInfo(file).Length;
         }
 
-        _aggregator.Reset(daily, weekly, monthly, hasData, projects, unknownModels, seenModels);
+        _aggregator.Reset(daily, weekly, monthly, hasData, projects, unknownModels, seenModels, dailyCosts, dayProjectCosts);
         return Task.CompletedTask;
     }
 
@@ -120,6 +128,8 @@ sealed class LogWatcher : IDisposable
                         isToday: local.Date == today,
                         isThisWeek: local.Date >= weekStart,
                         project: project);
+
+                _aggregator.AddHistoricalEntry(DateOnly.FromDateTime(local), project, cost.Value);
             }
 
             _fileOffsets[e.FullPath] = new FileInfo(e.FullPath).Length;

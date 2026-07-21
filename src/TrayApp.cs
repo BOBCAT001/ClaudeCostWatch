@@ -20,6 +20,7 @@ sealed class TrayApp : ApplicationContext
     private readonly UsageLogger _logger = new();
     private DateTime _lastScanDate = DateTime.Today;
     private BreakdownForm? _breakdownForm;
+    private ReportsForm? _reportsForm;
     private ToolStripMenuItem? _logToggleItem;
     private ToolStripMenuItem? _openLogItem;
 
@@ -146,6 +147,7 @@ sealed class TrayApp : ApplicationContext
         };
 
         menu.Items.Add("Project breakdown", null, (_, _) => ShowBreakdown());
+        menu.Items.Add("Reports...", null, (_, _) => ShowReports());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_logToggleItem);
         menu.Items.Add(_openLogItem);
@@ -178,13 +180,17 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(startupItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Exit", null, (_, _) =>
+        menu.Items.Add("Visit Project Homepage", null, (_, _) =>
+            Process.Start(new ProcessStartInfo("https://www.jlion.com/Tools/ClaudeCostWatch") { UseShellExecute = true }));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Close Application", null, (_, _) =>
         {
             if (_logger.IsLogging)
                 _logger.Stop(_aggregator.GetProjectTotals());
             _trayIcon.Visible = false;
             Application.Exit();
         });
+        menu.Items.Add("Close", null, (_, _) => menu.Close());
         return menu;
     }
 
@@ -238,6 +244,16 @@ sealed class TrayApp : ApplicationContext
         _breakdownForm.BringToFront();
     }
 
+    private void ShowReports()
+    {
+        if (_reportsForm is null || _reportsForm.IsDisposed)
+            _reportsForm = new ReportsForm(_aggregator, _credentials);
+
+        _reportsForm.RefreshData();
+        _reportsForm.Show();
+        _reportsForm.BringToFront();
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -246,6 +262,7 @@ sealed class TrayApp : ApplicationContext
             _trayIcon.Dispose();
             _watcher.Dispose();
             _breakdownForm?.Dispose();
+            _reportsForm?.Dispose();
         }
         base.Dispose(disposing);
     }

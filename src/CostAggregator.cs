@@ -10,6 +10,8 @@ sealed class CostAggregator
     private Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> _projects = new();
     private HashSet<string> _unknownModels = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _seenModels = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<DateOnly, decimal> _dailyCosts = new();
+    private Dictionary<DateOnly, Dictionary<string, decimal>> _dayProjectCosts = new();
 
     public void AddSeenModel(string model)
     {
@@ -37,10 +39,23 @@ sealed class CostAggregator
         }
     }
 
+    public void AddHistoricalEntry(DateOnly date, string project, decimal cost)
+    {
+        lock (_lock)
+        {
+            _dailyCosts[date] = _dailyCosts.TryGetValue(date, out var d) ? d + cost : cost;
+            if (!_dayProjectCosts.TryGetValue(date, out var dp))
+                _dayProjectCosts[date] = dp = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            dp[project] = dp.TryGetValue(project, out var pc) ? pc + cost : cost;
+        }
+    }
+
     public void Reset(decimal daily, decimal weekly, decimal monthly, bool hasData,
         Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> projects,
         HashSet<string> unknownModels,
-        HashSet<string> seenModels)
+        HashSet<string> seenModels,
+        Dictionary<DateOnly, decimal> dailyCosts,
+        Dictionary<DateOnly, Dictionary<string, decimal>> dayProjectCosts)
     {
         lock (_lock)
         {
@@ -51,6 +66,8 @@ sealed class CostAggregator
             _projects = projects;
             _unknownModels = unknownModels;
             _seenModels = seenModels;
+            _dailyCosts = dailyCosts;
+            _dayProjectCosts = dayProjectCosts;
         }
     }
 
@@ -81,6 +98,18 @@ sealed class CostAggregator
         lock (_lock)
         {
             return new Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)>(_projects);
+        }
+    }
+
+    public (IReadOnlyDictionary<DateOnly, decimal> DailyCosts, IReadOnlyDictionary<DateOnly, IReadOnlyDictionary<string, decimal>> DayProjectCosts) GetHistoricalData()
+    {
+        lock (_lock)
+        {
+            var daily = new Dictionary<DateOnly, decimal>(_dailyCosts);
+            var dayProject = _dayProjectCosts.ToDictionary(
+                kvp => kvp.Key,
+                kvp => (IReadOnlyDictionary<string, decimal>)new Dictionary<string, decimal>(kvp.Value, StringComparer.OrdinalIgnoreCase));
+            return (daily, dayProject);
         }
     }
 }
