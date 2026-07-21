@@ -8,6 +8,13 @@ sealed class CostAggregator
     private decimal _monthly;
     private bool _hasData;
     private Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> _projects = new();
+    private HashSet<string> _unknownModels = new(StringComparer.OrdinalIgnoreCase);
+
+    public void AddUnknownModel(string model)
+    {
+        lock (_lock)
+            _unknownModels.Add(model);
+    }
 
     public void Add(decimal cost, bool isToday, bool isThisWeek, string project)
     {
@@ -24,7 +31,8 @@ sealed class CostAggregator
     }
 
     public void Reset(decimal daily, decimal weekly, decimal monthly, bool hasData,
-        Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> projects)
+        Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> projects,
+        HashSet<string> unknownModels)
     {
         lock (_lock)
         {
@@ -33,7 +41,14 @@ sealed class CostAggregator
             _monthly = monthly;
             _hasData = hasData;
             _projects = projects;
+            _unknownModels = unknownModels;
         }
+    }
+
+    public IReadOnlyCollection<string> GetUnknownModels()
+    {
+        lock (_lock)
+            return [.. _unknownModels];
     }
 
     // Returns null when no pricing data was available during the last scan

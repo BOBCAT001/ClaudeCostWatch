@@ -99,7 +99,17 @@ sealed class BreakdownForm : Form
 
         _list.EndUpdate();
         var planNote = _credentials.IsSubscription ? $"{_credentials.PlanLabel} plan · API-equivalent · " : "";
-        _footer.Text = $"{planNote}Updated {DateTime.Now:HH:mm:ss}";
+        var unknown = _aggregator.GetUnknownModels();
+        if (unknown.Count > 0)
+        {
+            _footer.ForeColor = Color.DarkGoldenrod;
+            _footer.Text = $"⚠ Unpriced: {string.Join(", ", unknown)}";
+        }
+        else
+        {
+            _footer.ForeColor = SystemColors.GrayText;
+            _footer.Text = $"{planNote}Updated {DateTime.Now:HH:mm:ss}";
+        }
     }
 
     private static string FormatCost(decimal cost) => cost.ToString("C2");

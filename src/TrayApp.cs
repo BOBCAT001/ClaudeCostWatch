@@ -82,6 +82,9 @@ sealed class TrayApp : ApplicationContext
             var taskCost = _logger.GetTaskTotal(_aggregator.GetProjectTotals());
             text += $"\nTask:   {equiv}{taskCost:C2}";
         }
+        var unknown = _aggregator.GetUnknownModels();
+        if (unknown.Count > 0)
+            text += $"\n⚠ {unknown.Count} model(s) unpriced";
         _trayIcon.Text = text.Length > 127 ? text[..127] : text;
     }
 
