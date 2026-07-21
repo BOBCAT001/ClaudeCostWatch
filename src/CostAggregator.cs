@@ -9,6 +9,13 @@ sealed class CostAggregator
     private bool _hasData;
     private Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> _projects = new();
     private HashSet<string> _unknownModels = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _seenModels = new(StringComparer.OrdinalIgnoreCase);
+
+    public void AddSeenModel(string model)
+    {
+        lock (_lock)
+            _seenModels.Add(model);
+    }
 
     public void AddUnknownModel(string model)
     {
@@ -32,7 +39,8 @@ sealed class CostAggregator
 
     public void Reset(decimal daily, decimal weekly, decimal monthly, bool hasData,
         Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)> projects,
-        HashSet<string> unknownModels)
+        HashSet<string> unknownModels,
+        HashSet<string> seenModels)
     {
         lock (_lock)
         {
@@ -42,7 +50,14 @@ sealed class CostAggregator
             _hasData = hasData;
             _projects = projects;
             _unknownModels = unknownModels;
+            _seenModels = seenModels;
         }
+    }
+
+    public IReadOnlyCollection<string> GetSeenModels()
+    {
+        lock (_lock)
+            return [.. _seenModels];
     }
 
     public IReadOnlyCollection<string> GetUnknownModels()

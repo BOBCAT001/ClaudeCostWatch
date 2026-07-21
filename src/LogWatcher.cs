@@ -42,7 +42,7 @@ sealed class LogWatcher : IDisposable
 
         if (!Directory.Exists(_logRoot))
         {
-            _aggregator.Reset(0, 0, 0, false, new(), new());
+            _aggregator.Reset(0, 0, 0, false, new(), new(), new());
             return Task.CompletedTask;
         }
 
@@ -54,6 +54,7 @@ sealed class LogWatcher : IDisposable
         bool hasData = false;
         var projects = new Dictionary<string, (decimal Daily, decimal Weekly, decimal Monthly)>(StringComparer.OrdinalIgnoreCase);
         var unknownModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in Directory.EnumerateFiles(_logRoot, "*.jsonl", SearchOption.AllDirectories))
         {
@@ -61,6 +62,7 @@ sealed class LogWatcher : IDisposable
 
             foreach (var entry in LogParser.Parse(file))
             {
+                seenModels.Add(entry.Model);
                 var cost = _calculator.Calculate(entry);
                 if (cost is null) { unknownModels.Add(entry.Model); continue; }
 
@@ -87,7 +89,7 @@ sealed class LogWatcher : IDisposable
             _fileOffsets[file] = new FileInfo(file).Length;
         }
 
-        _aggregator.Reset(daily, weekly, monthly, hasData, projects, unknownModels);
+        _aggregator.Reset(daily, weekly, monthly, hasData, projects, unknownModels, seenModels);
         return Task.CompletedTask;
     }
 
@@ -108,6 +110,7 @@ sealed class LogWatcher : IDisposable
 
             foreach (var entry in LogParser.Parse(e.FullPath, offset))
             {
+                _aggregator.AddSeenModel(entry.Model);
                 var cost = _calculator.Calculate(entry);
                 if (cost is null) { _aggregator.AddUnknownModel(entry.Model); continue; }
 

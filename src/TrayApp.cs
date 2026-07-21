@@ -165,7 +165,9 @@ sealed class TrayApp : ApplicationContext
         });
         menu.Items.Add("Edit model rates...", null, async (_, _) =>
         {
-            using var form = new ModelRatesForm(_settings.ModelRateOverrides);
+            var seenWithRates = _aggregator.GetSeenModels()
+                .ToDictionary(m => m, m => _pricing.GetRates(m), StringComparer.OrdinalIgnoreCase);
+            using var form = new ModelRatesForm(_settings.ModelRateOverrides, seenWithRates);
             if (form.ShowDialog() != DialogResult.OK) return;
             _settings.ModelRateOverrides = new(form.Result, StringComparer.OrdinalIgnoreCase);
             _settings.Save();
