@@ -42,7 +42,7 @@ sealed class LogWatcher : IDisposable
 
         if (!Directory.Exists(_logRoot))
         {
-            _aggregator.Reset(0, 0, 0, false, new(), new(), new(), new(), new());
+            _aggregator.Reset(0, 0, 0, false, new(), new(), new(), new(), new(), new());
             return Task.CompletedTask;
         }
 
@@ -57,10 +57,12 @@ sealed class LogWatcher : IDisposable
         var seenModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var dailyCosts = new Dictionary<DateOnly, decimal>();
         var dayProjectCosts = new Dictionary<DateOnly, Dictionary<string, decimal>>();
+        var dayTaskCosts = new Dictionary<DateOnly, Dictionary<string, decimal>>();
 
         foreach (var file in Directory.EnumerateFiles(_logRoot, "*.jsonl", SearchOption.AllDirectories))
         {
             var project = Path.GetFileName(Path.GetDirectoryName(file)!) ?? "unknown";
+            var taskId = GetTaskId(_logRoot, file);
 
             foreach (var entry in LogParser.Parse(file))
             {
@@ -92,17 +94,27 @@ sealed class LogWatcher : IDisposable
                 if (!dayProjectCosts.TryGetValue(entryDate, out var dpc))
                     dayProjectCosts[entryDate] = dpc = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
                 dpc[project] = dpc.TryGetValue(project, out var pp) ? pp + cost.Value : cost.Value;
+                if (!dayTaskCosts.TryGetValue(entryDate, out var dtc))
+                    dayTaskCosts[entryDate] = dtc = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+                dtc[taskId] = dtc.TryGetValue(taskId, out var tp) ? tp + cost.Value : cost.Value;
             }
 
             _fileOffsets[file] = new FileInfo(file).Length;
         }
 
-        _aggregator.Reset(daily, weekly, monthly, hasData, projects, unknownModels, seenModels, dailyCosts, dayProjectCosts);
+        _aggregator.Reset(daily, weekly, monthly, hasData, projects, unknownModels, seenModels, dailyCosts, dayProjectCosts, dayTaskCosts);
         return Task.CompletedTask;
     }
 
     public void OpenLogFolder() =>
         Process.Start(new ProcessStartInfo("explorer.exe", _logRoot) { UseShellExecute = true });
+
+    private static string GetTaskId(string logRoot, string filePath)
+    {
+        var relative = Path.GetRelativePath(logRoot, filePath);
+        var parts = relative.Split(Path.DirectorySeparatorChar);
+        return parts.Length >= 2 ? Path.GetFileNameWithoutExtension(parts[1]) : "unknown";
+    }
 
     private void OnFileChanged(object sender, FileSystemEventArgs e)
     {
@@ -111,6 +123,7 @@ sealed class LogWatcher : IDisposable
             if (!File.Exists(e.FullPath)) return;
 
             var project = Path.GetFileName(Path.GetDirectoryName(e.FullPath)!) ?? "unknown";
+            var taskId = GetTaskId(_logRoot, e.FullPath);
             var offset = _fileOffsets.TryGetValue(e.FullPath, out var o) ? o : 0;
             var today = DateTime.Today;
             var monthStart = new DateTime(today.Year, today.Month, 1);
@@ -129,7 +142,7 @@ sealed class LogWatcher : IDisposable
                         isThisWeek: local.Date >= weekStart,
                         project: project);
 
-                _aggregator.AddHistoricalEntry(DateOnly.FromDateTime(local), project, cost.Value);
+                _aggregator.AddHistoricalEntry(DateOnly.FromDateTime(local), project, taskId, cost.Value);
             }
 
             _fileOffsets[e.FullPath] = new FileInfo(e.FullPath).Length;

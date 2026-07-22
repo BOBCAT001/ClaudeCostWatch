@@ -247,7 +247,7 @@ sealed class TrayApp : ApplicationContext
     private void ShowReports()
     {
         if (_reportsForm is null || _reportsForm.IsDisposed)
-            _reportsForm = new ReportsForm(_aggregator, _credentials);
+            _reportsForm = new ReportsForm(_aggregator, _credentials, _settings);
 
         _reportsForm.RefreshData();
         _reportsForm.Show();

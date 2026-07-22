@@ -1,4 +1,6 @@
 using System.Data;
+using System.Globalization;
+using System.IO;
 using System.Windows.Forms;
 
 namespace ClaudeCostWatch;
@@ -7,24 +9,28 @@ sealed class ReportsForm : Form
 {
     private readonly CostAggregator _aggregator;
     private readonly ClaudeCredentials _credentials;
+    private readonly AppSettings _settings;
     private readonly DataGridView _gridByDay;
     private readonly DataGridView _gridByWeek;
     private readonly DataGridView _gridProjectByDay;
     private readonly DataGridView _gridDayByProject;
     private readonly DataGridView _gridProjectTotals;
+    private readonly DataGridView _gridDayByTask;
     private readonly DataTable _tableByDay = new();
     private readonly DataTable _tableByWeek = new();
     private readonly DataTable _tableProjectByDay = new();
     private readonly DataTable _tableDayByProject = new();
     private readonly DataTable _tableProjectTotals = new();
+    private readonly DataTable _tableDayByTask = new();
     private readonly Label _footer;
 
     private record ColDef(string Name, int Width = 0, string? Format = null, bool RightAlign = false, bool Fill = false, bool IsWeekCol = false);
 
-    public ReportsForm(CostAggregator aggregator, ClaudeCredentials credentials)
+    public ReportsForm(CostAggregator aggregator, ClaudeCredentials credentials, AppSettings settings)
     {
         _aggregator = aggregator;
         _credentials = credentials;
+        _settings = settings;
 
         Text = "Cost Reports";
         Size = new Size(720, 520);
@@ -50,6 +56,10 @@ sealed class ReportsForm : Form
         _tableProjectTotals.Columns.Add("Project", typeof(string));
         _tableProjectTotals.Columns.Add("Total Cost", typeof(decimal));
 
+        _tableDayByTask.Columns.Add("Date", typeof(DateTime));
+        _tableDayByTask.Columns.Add("Task", typeof(string));
+        _tableDayByTask.Columns.Add("Cost", typeof(decimal));
+
         _gridByDay = MakeGrid(_tableByDay,
             new ColDef("Date", Width: 110, Format: "yyyy-MM-dd"),
             new ColDef("Cost", Width: 110, Format: "C2", RightAlign: true));
@@ -72,6 +82,11 @@ sealed class ReportsForm : Form
             new ColDef("Project", Fill: true),
             new ColDef("Total Cost", Width: 120, Format: "C2", RightAlign: true));
 
+        _gridDayByTask = MakeGrid(_tableDayByTask,
+            new ColDef("Date", Width: 110, Format: "yyyy-MM-dd"),
+            new ColDef("Task", Fill: true),
+            new ColDef("Cost", Width: 110, Format: "C2", RightAlign: true));
+
         _footer = new Label
         {
             Dock = DockStyle.Bottom,
@@ -88,6 +103,7 @@ sealed class ReportsForm : Form
         tabs.TabPages.Add(MakeTab("Project by Day", _gridProjectByDay));
         tabs.TabPages.Add(MakeTab("Day by Project", _gridDayByProject));
         tabs.TabPages.Add(MakeTab("Project Totals", _gridProjectTotals));
+        tabs.TabPages.Add(MakeTab("Day by Task", _gridDayByTask));
 
         Controls.Add(tabs);
         Controls.Add(_footer);
@@ -95,7 +111,7 @@ sealed class ReportsForm : Form
 
     public void RefreshData()
     {
-        var (dailyCosts, dayProjectCosts) = _aggregator.GetHistoricalData();
+        var (dailyCosts, dayProjectCosts, dayTaskCosts) = _aggregator.GetHistoricalData();
 
         _tableByDay.Rows.Clear();
         foreach (var (date, cost) in dailyCosts.OrderByDescending(d => d.Key))
@@ -136,8 +152,52 @@ sealed class ReportsForm : Form
             _tableProjectTotals.Rows.Add(ProjectNames.Decode(project), total);
         }
 
+        _tableDayByTask.Rows.Clear();
+        foreach (var (date, taskId, cost) in ParseUsageLog()
+            .GroupBy(x => (x.Date, x.TaskId))
+            .Select(g => (Date: g.Key.Date, TaskId: g.Key.TaskId, Cost: g.Sum(x => x.Cost)))
+            .OrderByDescending(x => x.Date).ThenBy(x => x.TaskId))
+        {
+            _tableDayByTask.Rows.Add(date.ToDateTime(TimeOnly.MinValue), taskId, cost);
+        }
+
         var planNote = _credentials.IsSubscription ? $"{_credentials.PlanLabel} plan · API-equivalent · " : "";
         _footer.Text = $"{planNote}Updated {DateTime.Now:HH:mm:ss}";
+    }
+
+    private IEnumerable<(DateOnly Date, string TaskId, decimal Cost)> ParseUsageLog()
+    {
+        if (_settings.LogFolder is null) yield break;
+        var logFile = Path.Combine(_settings.LogFolder, "usage_log.md");
+        if (!File.Exists(logFile)) yield break;
+
+        string? taskId = null;
+        DateOnly date = default;
+
+        foreach (var line in File.ReadLines(logFile))
+        {
+            if (line.StartsWith("## "))
+            {
+                taskId = null;
+                var dashIdx = line.IndexOf(" — ", StringComparison.Ordinal);
+                if (dashIdx < 0) continue;
+                var candidate = line[3..dashIdx];
+                var rest = line[(dashIdx + 3)..];
+                if (rest.Length >= 10 && DateOnly.TryParseExact(rest[..10], "yyyy-MM-dd", out var d))
+                {
+                    taskId = candidate;
+                    date = d;
+                }
+            }
+            else if (taskId is not null && line.StartsWith("| **Task total** | **"))
+            {
+                var inner = line["| **Task total** | **".Length..];
+                var end = inner.IndexOf("**", StringComparison.Ordinal);
+                if (end > 0 && decimal.TryParse(inner[..end], NumberStyles.Currency, CultureInfo.CurrentCulture, out var cost) && cost > 0)
+                    yield return (date, taskId, cost);
+                taskId = null;
+            }
+        }
     }
 
     private static DateOnly GetWeekStart(DateOnly date)
