@@ -19,10 +19,13 @@ sealed class TrayApp : ApplicationContext
     private readonly ClaudeCredentials _credentials;
     private readonly UsageLogger _logger = new();
     private DateTime _lastScanDate = DateTime.Today;
+    private bool _thresholdAlertShown;
     private BreakdownForm? _breakdownForm;
     private ReportsForm? _reportsForm;
     private ToolStripMenuItem? _logToggleItem;
     private ToolStripMenuItem? _openLogItem;
+    private ToolStripMenuItem? _setThresholdItem;
+    private ToolStripMenuItem? _clearThresholdItem;
 
     public TrayApp()
     {
@@ -56,6 +59,7 @@ sealed class TrayApp : ApplicationContext
         if (DateTime.Today != _lastScanDate)
         {
             _lastScanDate = DateTime.Today;
+            _thresholdAlertShown = false;
             await _watcher.RescanAsync();
         }
         UpdateTooltip();
@@ -78,7 +82,12 @@ sealed class TrayApp : ApplicationContext
         var plan = _credentials.IsSubscription ? $" ({_credentials.PlanLabel})" : "";
         var task = _logger.IsLogging ? $" [{_logger.ActiveTaskId}]" : "";
         var equiv = _credentials.IsSubscription ? "~" : "";
-        var text = $"ClaudeCostWatch{plan}{task} — {now:MMMM yyyy}\nToday:  {equiv}{FormatCost(daily)}\nWeek:   {equiv}{FormatCost(weekly)}\nMonth: {equiv}{FormatCost(monthly)}";
+
+        bool thresholdExceeded = _settings.DailyThreshold.HasValue
+            && daily.HasValue && daily.Value >= _settings.DailyThreshold.Value;
+        string todayPrefix = thresholdExceeded ? "⚠ " : "";
+
+        var text = $"ClaudeCostWatch{plan}{task} — {now:MMMM yyyy}\nToday:  {equiv}{todayPrefix}{FormatCost(daily)}\nWeek:   {equiv}{FormatCost(weekly)}\nMonth: {equiv}{FormatCost(monthly)}";
         if (_logger.IsLogging)
         {
             var taskCost = _logger.GetTaskTotal(_aggregator.GetProjectTotals());
@@ -88,6 +97,14 @@ sealed class TrayApp : ApplicationContext
         if (unknown.Count > 0)
             text += $"\n⚠ {unknown.Count} model(s) unpriced";
         _trayIcon.Text = text.Length > 127 ? text[..127] : text;
+
+        if (thresholdExceeded && !_thresholdAlertShown)
+        {
+            _thresholdAlertShown = true;
+            _trayIcon.ShowBalloonTip(8000, "Daily Spending Limit Reached",
+                $"Today's spending ({equiv}{FormatCost(daily)}) has exceeded your daily limit of {_settings.DailyThreshold!.Value:C2}.",
+                ToolTipIcon.Warning);
+        }
     }
 
     private static Icon LoadIcon()
@@ -135,6 +152,15 @@ sealed class TrayApp : ApplicationContext
 
         _openLogItem = new ToolStripMenuItem("Open log file", null, (_, _) => OpenLogFile());
 
+        _setThresholdItem = new ToolStripMenuItem("Set daily limit...", null, (_, _) => SetDailyThreshold());
+        _clearThresholdItem = new ToolStripMenuItem("Clear daily limit", null, (_, _) =>
+        {
+            _settings.DailyThreshold = null;
+            _settings.Save();
+            _thresholdAlertShown = false;
+            UpdateTooltip();
+        });
+
         var menu = new ContextMenuStrip();
         menu.Opening += (_, _) =>
         {
@@ -144,6 +170,10 @@ sealed class TrayApp : ApplicationContext
                 : "Start logging...";
             _openLogItem.Enabled = _settings.LogFolder is not null
                 && File.Exists(Path.Combine(_settings.LogFolder, "usage_log.md"));
+            _setThresholdItem.Text = _settings.DailyThreshold.HasValue
+                ? $"Daily limit: {_settings.DailyThreshold.Value:C2}..."
+                : "Set daily limit...";
+            _clearThresholdItem.Enabled = _settings.DailyThreshold.HasValue;
         };
 
         menu.Items.Add("Project breakdown", null, (_, _) => ShowBreakdown());
@@ -177,6 +207,8 @@ sealed class TrayApp : ApplicationContext
             await _watcher.RescanAsync();
             UpdateTooltip();
         });
+        menu.Items.Add(_setThresholdItem);
+        menu.Items.Add(_clearThresholdItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(startupItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -192,6 +224,35 @@ sealed class TrayApp : ApplicationContext
         });
         menu.Items.Add("Close", null, (_, _) => menu.Close());
         return menu;
+    }
+
+    private void SetDailyThreshold()
+    {
+        var current = _settings.DailyThreshold.HasValue
+            ? _settings.DailyThreshold.Value.ToString("F2")
+            : "";
+        using var dlg = new InputDialog("Daily Spending Limit", "Limit amount in dollars (e.g. 15.00):", current);
+        if (dlg.ShowDialog() != DialogResult.OK) return;
+
+        var text = dlg.Value.TrimStart('$').Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            _settings.DailyThreshold = null;
+        }
+        else if (decimal.TryParse(text, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var amount) && amount > 0)
+        {
+            _settings.DailyThreshold = amount;
+            _thresholdAlertShown = false;
+        }
+        else
+        {
+            MessageBox.Show("Please enter a valid dollar amount (e.g. 15.00).",
+                "Invalid Amount", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _settings.Save();
+        UpdateTooltip();
     }
 
     private void StartLogging()

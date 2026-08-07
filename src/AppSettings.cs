@@ -39,6 +39,9 @@ sealed class AppSettings
     [JsonPropertyName("logFolder")]
     public string? LogFolder { get; set; }
 
+    [JsonPropertyName("dailyThreshold")]
+    public decimal? DailyThreshold { get; set; }
+
     [JsonPropertyName("modelRateOverrides")]
     public Dictionary<string, ModelRateOverride> ModelRateOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 

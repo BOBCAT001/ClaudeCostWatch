@@ -7,7 +7,7 @@ sealed class InputDialog : Form
     private readonly TextBox _input;
     public string Value => _input.Text.Trim();
 
-    public InputDialog(string title, string prompt)
+    public InputDialog(string title, string prompt, string defaultValue = "")
     {
         Text = title;
         Size = new Size(360, 145);
@@ -19,7 +19,7 @@ sealed class InputDialog : Form
 
         var label = new Label { Text = prompt, Location = new Point(12, 14), AutoSize = true };
 
-        _input = new TextBox { Location = new Point(12, 36), Width = 318 };
+        _input = new TextBox { Location = new Point(12, 36), Width = 318, Text = defaultValue };
 
         var ok = new Button
         {
