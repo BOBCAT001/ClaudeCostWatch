@@ -34,16 +34,22 @@ Hover the tray icon to see your current costs. Right-click for the context menu.
 
 | Item | Description |
 |------|-------------|
-| **Project breakdown** | Popup table showing daily / weekly / monthly cost per Claude Code project |
-| **Start logging...** | Prompts for a task ID, then tracks incremental cost; updates the log every 30 s |
-| **Stop logging [ID]** | Finalises the current log entry |
-| **Open log file** | Opens the Markdown usage log in your default editor |
-| **Set log folder...** | Choose where usage logs are saved |
-| **Open Claude JSONL folder** | Browse the raw Claude Code log files |
-| **Refresh now** | Re-read logs immediately |
-| **Refresh pricing** | Re-fetch model prices from LiteLLM |
-| **Start with Windows** | Toggle autostart |
-
+  | **Project breakdown** | Opens a popup table showing Today / Week / Month cost per Claude Code project |
+  | **Reports...** | Opens the historical reports window with tabs for cost by day, week, project, and task |
+  | **Start logging...** | Prompts for a task ID and begins tracking incremental cost for that task |
+  | **Stop logging [ID]** | Finalises the current task log entry and writes a summary to the log file |
+  | **Open log file** | Opens `usage_log.md` in your default editor |
+  | **Set log folder...** | Choose the folder where `usage_log.md` is written |
+  | **Open Claude JSONL folder** | Opens `~\.claude\projects\` in Explorer to browse raw Claude Code log files |
+  | **Refresh now** | Forces an immediate rescan of all JSONL log files |
+  | **Refresh pricing** | Re-fetches model pricing data from LiteLLM and rescans logs |
+  | **Edit model rates...** | Opens a dialog to override per-model pricing; overrides take precedence over LiteLLM rates |
+  | **Set daily limit...** | Opens a dialog to set a daily spending threshold; a balloon alert fires when it is exceeded |
+  | **Clear daily limit** | Removes the daily spending threshold (greyed out when no limit is set) |
+  | **Start with Windows** | Toggles the autostart registry entry so ClaudeCostWatch launches at login |
+  | **Visit Project Homepage** | Opens the project page in your default browser |
+  | **Close Application** | Stops logging if active, removes the tray icon, and exits |
+  
 ### Usage logging
 
 Start logging before you begin a task, enter a task ID (e.g. `PROJ-123` or `#42`), then stop when you're done. A Markdown file (`usage_log.md`) in your chosen log folder records each session with a per-project cost breakdown.
